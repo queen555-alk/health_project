@@ -70,3 +70,25 @@ def due_date(lmp: date):
 def antenatal(lmp: date):
     return antenatal_schedule(lmp)
 
+
+@app.post("/mothers", response_model=MotherOut)
+def register_mother(data: MotherCreate, db: Session = Depends(get_db)):
+    mother = models.Mother(
+        name=data.name,
+        phone=data.phone,
+        lmp_date=data.lmp_date,
+        due_date=estimated_due_date(data.lmp_date),
+    )
+    db.add(mother)
+    db.flush()
+    for visit in antenatal_schedule(data.lmp_date):
+        if visit["date"] >= date.today():
+            db.add(models.Appointment(
+                mother_id=mother.id,
+                visit_number=visit["visit"],
+                week=visit["week"],
+                due_date=visit["date"],
+            ))
+    db.commit()
+    db.refresh(mother)
+    return mother
