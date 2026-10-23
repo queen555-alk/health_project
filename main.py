@@ -92,3 +92,10 @@ def register_mother(data: MotherCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(mother)
     return mother
+
+
+@app.get("/mothers", response_model=list[MotherOut])
+def list_mothers(db: Session = Depends(get_db)):
+    return db.query(models.Mother).all()
+
+
