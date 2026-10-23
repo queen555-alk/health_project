@@ -115,13 +115,3 @@ def mother_schedule(mother_id: int, db: Session = Depends(get_db)):
     return antenatal_schedule(mother.lmp_date)
 
 
-class AppointmentOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    visit_number: int
-    week: int
-    due_date: date
-    done: bool
-    done_on: date | None
-
