@@ -105,3 +105,12 @@ def mother_schedule(mother_id: int, db: Session = Depends(get_db)):
     if mother is None:
         raise HTTPException(status_code=404, detail="Mother not found")
     return antenatal_schedule(mother.lmp_date)
+
+
+@app.get("/mothers/{mother_id}/schedule")
+def mother_schedule(mother_id: int, db: Session = Depends(get_db)):
+    mother = db.get(models.Mother, mother_id)
+    if mother is None:
+        raise HTTPException(status_code=404, detail="Mother not found")
+    return antenatal_schedule(mother.lmp_date)
+
