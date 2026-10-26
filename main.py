@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from fastapi import Depends, FastAPI, HTTPException, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy.orm import Session
 
@@ -36,6 +36,17 @@ class MotherOut(BaseModel):
     phone: str
     lmp_date: date
     due_date: date
+
+
+class AppointmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    visit_number: int
+    week: int
+    due_date: date
+    done: bool
+    done_on: date | None
 
 
 def estimated_due_date(lmp: date) -> date:
@@ -107,21 +118,52 @@ def mother_schedule(mother_id: int, db: Session = Depends(get_db)):
     return antenatal_schedule(mother.lmp_date)
 
 
-@app.get("/mothers/{mother_id}/schedule")
-def mother_schedule(mother_id: int, db: Session = Depends(get_db)):
+@app.get("/mothers/{mother_id}/appointments", response_model=list[AppointmentOut])
+def mother_appointments(mother_id: int, db: Session = Depends(get_db)):
     mother = db.get(models.Mother, mother_id)
     if mother is None:
         raise HTTPException(status_code=404, detail="Mother not found")
-    return antenatal_schedule(mother.lmp_date)
+    return (
+        db.query(models.Appointment)
+        .filter(models.Appointment.mother_id == mother_id)
+        .order_by(models.Appointment.due_date)
+        .all()
+    )
 
 
-class AppointmentOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+@app.post("/appointments/{appointment_id}/done", response_model=AppointmentOut)
+def mark_done(appointment_id: int, db: Session = Depends(get_db)):
+    appointment = db.get(models.Appointment, appointment_id)
+    if appointment is None:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    appointment.done = True
+    appointment.done_on = date.today()
+    db.commit()
+    db.refresh(appointment)
+    return appointment
 
-    id: int
-    visit_number: int
-    week: int
-    due_date: date
-    done: bool
-    done_on: date | None
 
+@app.get("/missed")
+def missed_visits(as_of: date | None = None, db: Session = Depends(get_db)):
+    today = as_of or date.today()
+    rows = (
+        db.query(models.Appointment, models.Mother)
+        .join(models.Mother, models.Mother.id == models.Appointment.mother_id)
+        .filter(models.Appointment.done.is_(False))
+        .filter(models.Appointment.due_date < today)
+        .order_by(models.Appointment.due_date)
+        .all()
+    )
+    return [
+        {
+            "appointment_id": a.id,
+            "mother_id": m.id,
+            "mother": m.name,
+            "phone": m.phone,
+            "visit_number": a.visit_number,
+            "week": a.week,
+            "due_date": a.due_date,
+            "days_overdue": (today - a.due_date).days,
+        }
+        for a, m in rows
+    ]
